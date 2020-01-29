@@ -22,5 +22,5 @@ contain examples to compute list of EOtypes of curves and Prym varieties respect
 Documentation
 -------------
 
-The documentation is a light (apologies) but included are the slides from a talk I gave on tis codebase. 
+The documentation is a light (apologies) but included are the slides from a talk I gave on this codebase. 
 
