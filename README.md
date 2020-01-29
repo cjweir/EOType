@@ -12,5 +12,15 @@ To use the code in Magma simply attach the EOType file
 Examples 
 --------
 
-The two files ExampleRunEO.mag and ExamplePrym.mag contain examples to compute list of EOtypes of curves and Prym varieties respectively 
+The two files 
+
+* ExampleHyperellipticEO.mag 
+* ExamplePrym.mag 
+
+contain examples to compute list of EOtypes of curves and Prym varieties respectively 
+
+Documentation
+-------------
+
+The documentation is a light (apologies) but included are the slides from a talk I gave on tis codebase. 
 
