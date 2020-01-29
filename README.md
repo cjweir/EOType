@@ -26,7 +26,7 @@ contain examples to compute lists of EOtypes of Jacobians of curves and Prym var
 
 # Documentation:
 
-The documentation is a but light (apologies). Included in the folder is what is below and some slides from a (funny at the time) talk I gave on this codebase at the Canadian Mathematics Society Winter Meeting in December 2018. 
+The documentation is a bit light (apologies). Included in the folder is what is below and some slides from a (funny at the time) talk I gave on this codebase at the Canadian Mathematics Society Winter Meeting in December 2018. 
 
 
 ## Main functions:
