@@ -1,0 +1,648 @@
+declare attributes FldFun:H1deRham;
+
+pullBack:=function(f, s);
+    s:=Image(f) meet s;
+    sol, N := Solution(f, Basis(s));
+    return sub<Generic(N)|[b : b in Basis(N + RowSpace(Matrix(sol)))]>;
+end function;
+
+intrinsic IsValidEO(EO::SeqEnum) ->. 
+   {Checks if the length 2g sequence is a valid symmetric BT1 EO-type}
+   g:=Integers()!EO[#EO];
+   is_dual:=&and [(EO[j] eq EO[j+1]) eq (EO[2*g-j] eq (EO[2*g-j-1]+1)) : j in [1..2*g-2]];
+   is_increasing:= &and [EO[i+1] in {EO[i], EO[i]+1} : i in [1..#EO-1]];  
+   return is_increasing and is_dual and (EO[#EO] eq (#EO div 2)) and (EO[1] in {0,1});
+end intrinsic;
+
+intrinsic ExtendEO(EO::SeqEnum) -> .
+	{Given a length g EO type return the length 2g type}
+	
+    g:=#EO;
+    longEO:=EO cat [0 : i in [1..g]];
+    for i in [1..g-1] do 
+    	longEO[2*g-i] := EO[i]+g-i;	
+    end for;
+    longEO[2*g] :=g;
+    assert IsValidEO(longEO);
+    return longEO;
+end intrinsic;
+
+FinalFiltration:=procedure(~EO);
+  last:=0;
+  thisrun:=[];
+  inputEO:=EO;
+  for i in [1..#EO] do
+    if EO[i] eq -1 then
+       Append(~thisrun,i);
+    else
+       for j in [1..#thisrun] do
+         if EO[i] eq last then
+           EO[i-j]:=last;
+         else
+           EO[i-j]:=EO[i] - j;
+        end if;
+       end for;
+       last:=EO[i];
+       thisrun:=[];
+    end if;
+  end for;
+
+end procedure;
+
+
+intrinsic H1dR(K::FldFun) -> AlgMat
+  {Return the F,V module of dimension 2g}
+  
+  if assigned K`H1deRham then
+    return K`H1deRham;
+  end if;
+  
+  p:=Characteristic(K);
+  Fq:=ConstantField(K);
+  Fp:=GF(p);
+  g:=Genus(K);
+  n:=Degree(Fq,Fp);
+  
+  P:=[ZeroDivisor(d), PoleDivisor(d)]   where d := Divisor(K!BaseField(K).1);
+  N:=Ceiling(2*g/Degree(P[1]));
+
+  NP1:= N*(P[1]);
+  NP2:= N*(P[2]);
+  pNP1:= p*NP1;
+  pNP2:= p*NP2;
+  
+  //
+  // ------  Build the Riemann Roch Spaces for H^1(O) and H^0(Omega_1)
+  //
+  
+  O, Om:=DifferentialSpace(DivisorGroup(K)!0);
+  O12, O12m:=DifferentialSpace(-(NP1+NP2) -P[1]-P[2]);
+  O1, O1m:=DifferentialSpace(-NP1-P[1]);
+  O2, O2m:=DifferentialSpace(-NP2-P[2]); 
+
+  R12, R12m:=RiemannRochSpace(NP1+NP2);
+  R1, R1m:=RiemannRochSpace(NP1);
+  R2, R2m:=RiemannRochSpace(NP2);
+
+  H, Hm:=R12/(R1+R2);
+
+  if Dimension(H) ne g or g eq 0 then
+  	print "WARNING: Constant field not exact!";
+  	return RModule(MatrixRing(Fq,0));
+  end if;
+  
+  // Deal with extension fields by restriction of scalars.
+  
+  H_Fp, H_Fpm:=KModule(H, Fp); 
+  pBasisfns:=[R12m(Inverse(Hm)(Inverse(H_Fpm)(b))) : b in Basis(H_Fp)];
+  O_Fp, O_Fpm :=KModule(O, Fp);
+  
+  //
+  // ------ Build Riemann Roch Spaces with larger poles and the reduction map back
+  //
+
+  P12, P12m:=RiemannRochSpace(pNP1+pNP2);
+  P1, P1m:=RiemannRochSpace(pNP1);
+  P2, P2m:=RiemannRochSpace(pNP2);
+
+  Hp,Hpm:=P12/(P1+P2);
+
+  Basisfns:=[R12m(Inverse(Hm)(b)) : b in Basis(H)];
+  RtoP:=Matrix([Hpm(Inverse(P12m)(b)) : b in Basisfns]);
+  _, PtoR:=IsInvertible(RtoP);
+
+
+  //
+  // ------ Build Frobenius on H^1(O) -> H^1(O)
+  //
+
+  FirstFH:=Matrix([H_Fpm(Vector(Hpm(Inverse(P12m)(b ^ p))*PtoR)) : b in pBasisfns]);
+  FH, HBasis:=JordanForm(FirstFH);
+
+  //
+  // ------ Build Frobenius on H^1(O) -> H^0(Omega_1) on the kernel of the above
+  //
+
+  Q,Qm:=P12 / P1;
+  P2fns:=[P2m(b) : b in Basis(P2)];
+  PL1:=[Qm(Sm(b)) : b in Basis(S)] where S,Sm:=sub<P12|P2>;
+
+  FO:=[];
+  for i in [1..NumberOfRows(FH)] do 
+	if IsZero(FH[i]) then 
+		//
+		// Write f^p = u + v where u only has poles at P[1] and v at P[2]  
+		// Then Frobenius(f) = du 
+		//
+		u:=Qm(Inverse(P12m)(R12m(Inverse(Hm)(Inverse(H_Fpm)(HBasis[i])))^p));
+		//u:=Qm(Inverse(P12m)(R12m(Inverse(Hm)((HBasis[i])))^p));
+		sol:=Solution(Matrix(PL1), u);
+		fpu:=&+[sol[i]*P2fns[i] : i in [1..Dimension(P2)]];
+		Append(~FO, O_Fpm(Inverse(Om)(Differential(fpu))));
+	else 
+		Append(~FO, O_Fp!0);
+	end if;
+  end for;
+
+  //
+  // ------ Set F on H^1_dR
+  //
+  
+  F:=VerticalJoin(HorizontalJoin(FH, Matrix(FO)), ZeroMatrix(Fp,g*n,2*g*n));
+
+  //
+  // ------ Build Verchiebung on H^1(O) -> H^0(Omega_1)
+  //
+
+  
+  Q,Qm:=O12 / O1;
+  O2fns:=[O2m(b) : b in Basis(O2)];
+  OL1:=[Qm(Sm(b)) : b in Basis(S)] where S,Sm:=sub<O12|O2>;
+  
+  VO:=[];
+  ImF:=Image(FirstFH);
+  for b in Rows(HBasis) do 
+  	if not b in ImF then
+    	// 
+    	// Write df = du + dv where du only has poles at P[1] and dv only have poles at P[2]
+        // Then V(f) = Cartier(dv) 
+    	//
+        dif:=Differential(R12m(Inverse(Hm)(Inverse(H_Fpm)(b))));
+ 		dv_vec:=Qm((Inverse(O12m)(dif)));
+ 		sol:=Solution(Matrix(OL1), dv_vec);		
+ 		dv:=&+[sol[i]*O2fns[i] : i in [1..Dimension(O2)]];
+ 		Append(~VO, O_Fpm(Inverse(Om)(Cartier(dv))));
+	else 
+		Append(~VO, O_Fp!0);
+ 	end if;
+  end for;
+  
+  //
+  // ------ V on H^1_dR (NOTE: Verchiebung on H^0(Omega_1) -> H^0(Omega_1) is Cartier)
+  //
+  
+  VH:=[];
+  for b in Basis(O_Fp) do 
+    Append(~VH, O_Fpm(Inverse(Om)(Cartier(Om(Inverse(O_Fpm)(b))))));
+  end for;  
+  	
+  
+  Z:=ZeroMatrix(Fp, g*n,g*n);
+  V:=VerticalJoin(HorizontalJoin(Z, Matrix(VO)), HorizontalJoin(Z, Matrix(VH)));
+
+  // Set the attribute and return the module. 
+  
+  M:=RModule(MatrixRing<Fp, 2*g*n |F,V>);
+  K`H1deRham:=M;
+  return M;
+end intrinsic;
+
+intrinsic EOType(D::ModRng) -> .
+	{Return the EO type of the FV module}
+	
+	H1:=VectorSpace(D);
+    S:=[*H1*];
+
+  Vit:=function(V,S, Filt);
+     VS:=[* *];
+     for s in S do
+        flag:=true;
+        thisS:=s;
+        while flag do
+           //Vs:=sub<H1|[b*V : b in Basis(thisS)]>;
+           Vs:=thisS*V;
+           Filt[Dimension(thisS)]:=Dimension(Vs);
+           if Dimension(Vs) eq 0 then
+              flag:=false;
+           else
+              if Filt[Dimension(Vs)] eq -1 then
+                 Append(~VS, Vs);
+                 thisS:=Vs;
+              else
+                 flag:=false;
+              end if;
+           end if;
+        end while;
+     end for;
+     return Filt, VS;
+  end function;
+
+  Finit:=function(F,S, Filt);
+     FS:=[* *];
+     dims:={};
+     for s in S do
+        flag:=true;
+        Fi:=F;
+        while flag do
+           Fins:=pullBack(Fi, s);
+           if Filt[Dimension(Fins)] eq -1 and not Dimension(Fins) in dims then
+             Append(~FS, Fins);
+             Include(~dims, Dimension(Fins));
+             Fi:=Fi*F;
+           else
+             flag:=false;
+           end if;
+        end while;
+     end for;
+     return FS;
+  end function;
+
+  F:=Action(D).1;
+  V:=Action(D).2;
+  EO:=[-1: i in [1..Dimension(D)]];
+  EO1, VS:= Vit(V, S, EO);
+  while EO1 ne EO do
+    EO:=EO1;
+    FS:=Finit(F,VS, EO);
+    EO1,VS:=Vit(V,FS, EO);
+  end while;
+
+  FinalFiltration(~EO);
+  
+  return EO;
+end intrinsic;
+  
+
+intrinsic EOType(Kn::FldFun) -> []
+  {Return the lenght 2g sequence of the Ekedahl-Oort type of Kn}
+  M:=H1dR(Kn);
+  
+  if Dimension(M) eq 0 then
+  	return [];
+  end if;
+  
+  EO:=EOType(M);  
+  
+  Fp:=GF(Characteristic(Kn));
+  Fq:=ConstantField(Kn);
+  n:=Degree(Fq,Fp);
+  g:=Genus(Kn);
+
+  eo_dim:=Integers()!(Dimension(M)/2);
+ 
+  NewEO:=[];
+  n:=Integers()!(eo_dim/g);
+  for i in [1..Floor(#EO/n)] do
+     Append(~NewEO,Integers()!(EO[i*n]/n));
+  end for;
+  EO:=NewEO;
+  
+  assert IsValidEO(EO);
+  
+  return EO;
+end intrinsic;
+
+//
+// ------------------------- Conversion functions:
+//
+
+
+intrinsic EOToPermutation(EO::SeqEnum)-> .
+  {Convert EO type to a permutation}
+  
+  pi:=[];
+  if EO[1] eq 1 then
+    pi[1]:=0;
+  else
+    pi[1]:=EO[#EO];
+  end if;
+
+  for i in [1..#EO-1] do;
+    if EO[i] eq EO[i+1] then
+      pi[i+1]:=EO[#EO]+i-EO[i];
+    else
+      pi[i+1]:=EO[i];
+    end if;
+  end for;
+
+  S2g:=SymmetricGroup(#EO);
+  cyc:=S2g![p+1: p in pi];
+  return cyc;
+end intrinsic;
+
+intrinsic PermutationToEO(c::GrpPermElt) -> .
+	{Permutation to EO}
+    EOC:=[];
+    c_elt:=Eltseq(c); 
+    if c_elt[1] eq 1 then
+    	EOC[1]:= 1;
+    	count:=1;
+    else 	
+    	EOC[1]:=0;
+    	count:=0;
+    end if;
+    
+    for i in [2..#c_elt] do
+      if c_elt[i] lt i then
+        count:=count+1;
+      end if;
+      if (c_elt[i] eq i) and i le (#c_elt div 2) then 
+      	count:=count+1;
+      end if;
+      EOC[i]:=count;
+    end for;
+ 	return EOC;
+end intrinsic;
+
+intrinsic PermutationToEO(c::SeqEnum) -> .
+	{Permutation to EO}
+	return PermutationToEO(SymmetricGroup(#c)!c);
+end intrinsic;
+
+
+intrinsic DecomposeEO(EO::SeqEnum) -> .
+  {Return the EO type of each irreducible submodule}
+
+  cyc:=EOToPermutation(EO);
+  C:=CycleDecomposition(cyc);
+  g:=EO[#EO];
+  
+  EODec:=AssociativeArray();
+  for c in C do
+  	if #c eq 1 then 
+  		if c[1] gt g then 
+  			EOC:=[0];
+  		else
+  			EOC:=[1];
+  		end if;
+  	else 
+  		table:=Sort(c);
+  		newc:={@ Index(table,i) : i in c @};
+    	EOC:=PermutationToEO(Sym(#newc)![newc]);
+    end if;
+    
+    if not IsDefined(EODec, EOC) then
+      EODec[EOC]:=1;
+    else
+      EODec[EOC]+:=1;
+    end if;
+  end for;
+
+  return {*eo^^EODec[eo] : eo in Keys(EODec) *};
+end intrinsic
+
+NormalizeCycle:=function(fvword);
+	seq:=Eltseq(fvword);
+	P:=Parent(fvword);
+	return P!Min({Rotate(seq,i) : i in [1..#seq]});
+end function;
+
+
+CycletoFV:=function(c : P:=FreeGroup(2));
+    f:=P.1;
+    v:=P.2;
+    w:=P!1;
+    c:=IndexedSetToSequence(c);
+    for i in [2..#c] do
+      if c[i] gt c[i-1] then
+        w:=w*f;
+      else
+        w:=w*v;
+      end if;
+    end for;
+    if c[#c] gt c[1] then
+    	w:=w*v;
+    end if;
+ return NormalizeCycle(w);
+end function;
+
+intrinsic EOToFVRelations(EO::SeqEnum : P:=FreeGroup(2)) ->.
+    {return the fv relations of the components}
+    
+    if Names(P) eq Names(FreeGroup(2)) then
+    	AssignNames(~P, ["F","V"]);
+    end if;
+    decomp:={* *};
+    
+    for c in CycleDecomposition(EOToPermutation(EO)) do 
+  		if #c eq 1 then 
+  			if c[1] gt EO[#EO] then 
+  				fv_rel:=P.1;
+  			else
+  				fv_rel:=P.2;
+  			end if;
+  		else 
+  			fv_rel:=CycletoFV(c: P:=P);
+    	end if;
+    
+   		Include(~decomp, [fv_rel]);
+   	end for;
+    return decomp;		
+end intrinsic;
+
+intrinsic FVRelationToEO(FVelt::GrpFPElt) ->.
+    {FV Relations to an EO type}
+    
+	EO:=[];
+	fvseq:= Reverse(Eltseq(NormalizeCycle(FVelt)));
+	
+	if #fvseq eq 1 then 
+		if fvseq[1] eq 1 then
+			return [1];
+		else 
+			return [0];
+		end if;
+	end if;
+	
+	
+	Mat_Ring:=MatrixRing(GF(2), #fvseq);
+	f:=Zero(Mat_Ring);
+	v:=Zero(Mat_Ring);
+		
+	for i in [1..#fvseq-1] do 
+		if fvseq[i] eq 2 then 
+			v[i,i+1] +:=1;
+		else 
+			f[i+1,i]+:=1;
+		end if;
+	end for;
+	f[1,#fvseq] +:=1;
+	  
+	M:=RModule(MatrixRing<GF(2), #fvseq | Transpose(f), Transpose(v)>);
+	return EOType(M);
+	 	
+end intrinsic;
+
+
+F_iter:=function(EOs, S, Filt);
+	FS:=[* *];
+	dims:={};
+	genera := [e[#e] : e in EOs];
+	for s in S do
+		flag:=true;
+		thiss:=s;
+		while flag do 
+			F_ins:=[thiss[i] eq 0 select genera[i] else (thiss[i] - EOs[i][thiss[i]]) + genera[i] : i in [1..#genera]];
+			if Filt[&+F_ins] eq -1 and not &+F_ins in dims then
+				Append(~FS, F_ins);	
+				Include(~dims, &+F_ins);
+				thiss:=F_ins;
+			else
+				flag:=false;
+			end if;
+		end while;
+	end for;
+	return FS;
+end function;
+
+V_iter:=function(EOs, S, Filt);
+	VS:=[* *];
+	for s in S do 
+		flag:=true;
+		thiss:=s;
+		while flag do 
+			Vs:=[thiss[i] eq 0 select 0 else EOs[i][thiss[i]] : i in [1..#s]];
+			Filt[&+thiss] := &+Vs;
+			if &+Vs eq 0 then 
+				flag:=false;
+			else 
+				if Filt[&+Vs] eq -1 then
+					Append(~VS, Vs);
+					thiss:=Vs;
+				else
+					flag:=false;
+				end if;
+			end if;
+		end while;
+	end for;
+	return Filt, VS;
+end function;
+
+
+intrinsic ComposeEO(EOset::SetMulti) -> .
+	{Turns a multiset of EOs into a single EO}
+	if Type(EOset) eq SetMulti then 
+		EOs:=MultisetToSequence(EOset);
+	else 
+		EOs:=EOset;
+	end if;
+	
+	//assert &and [IsEven(#e) or (#e eq 1) : e in EOs];
+	
+	genera := [#e/2 : e in EOs];
+	g := Integers()!(&+genera);
+	
+  	EO:=[-1: i in [1..2*g-1]] cat [g];
+  	
+  	S:=[[#eo : eo in EOs]];
+  	EO1, VS:= V_iter(EOs, S, EO);
+  	while EO1 ne EO do
+    	EO:=EO1;
+    	FS:=F_iter(EOs,VS, EO);
+    	EO1,VS:=V_iter(EOs,FS, EO);
+  	end while;
+
+	FinalFiltration(~EO);
+ 	assert IsValidEO(EO);
+ 	
+ 	return(EO);
+end intrinsic;
+ 
+ 
+intrinsic FVRelationsToEO(FVelts::SetMulti) ->.
+    {From a collection of FV Relations to an EO type}   
+    return ComposeEO({*FVRelationToEO(fv[1]) : fv in FVelts*});        	
+end intrinsic;
+
+
+intrinsic FVModule(EO::SeqEnum , p::RngIntElt) -> .
+	{Return the canonical FV module (over GF(p)) for a given type}
+	
+	assert IsPrime(p);
+	
+	g:=EO[#EO];
+	
+	Mat_ring:=MatrixRing(GF(p),2*g);
+	F:=Zero(Mat_ring);
+	V:=Zero(Mat_ring);
+	IP:=Zero(Mat_ring);
+	
+	jump_indices:=[];
+	if EO[1] eq 1 then 
+		Append(~jump_indices, 1);
+	end if;
+	for i in [2..2*g] do 
+		if EO[i] gt EO[i-1] then
+			Append(~jump_indices, i);
+		end if;
+	end for;
+	
+	assert #jump_indices eq g;
+	
+	non_indices:=[2*g+1-j : j in jump_indices];
+	
+	for i in [1..g] do 
+		IP[jump_indices[i],non_indices[i]] :=1;
+		IP[non_indices[i], jump_indices[i]] :=-1;
+	end for;
+	
+	for i in [1..g] do 
+		F[jump_indices[i], i] :=1;
+	end for;
+	 
+	for i in [1..g] do 
+		sign:=1;
+		if 2*g+i-1 in jump_indices then
+			sign:=-1;
+		end if;
+		V[2*g-i+1, non_indices[i]] := sign;
+	end for;
+	
+	return RModule(MatrixRing<GF(p), 2*g | Transpose(F), Transpose(V)>),  IP;
+end intrinsic;
+
+	
+intrinsic _Tester(g::.)
+    {testing the compose and decompose functions}
+	V:=VectorSpace(GF(2),g);
+
+	eolist:=[];
+	for v in V do 
+		eo:=[0 : i in [1..g+1]];
+		for i in [2..g+1] do 
+			eo[i] := eo[i-1]+ Integers()!(v[i-1]);
+		end for;
+		eo:=eo[2..g+1];
+		for i in [g+1..2*g-1] do 
+			Append(~eo, eo[2*g-i]-g+i);
+		end for;
+		Append(~eo, g);
+		eolist cat:=[eo];
+		
+	    //tests
+	    
+	    //print eo;
+	    
+	    //Symmetric EO tests
+	    try 
+			assert eo eq ComposeEO(DecomposeEO(eo));
+			assert eo eq PermutationToEO(EOToPermutation(eo));
+			assert eo eq EOType(FVModule(eo,3));
+			assert eo eq FVRelationsToEO(EOToFVRelations(eo));
+			assert DecomposeEO(eo) eq {* EOType(s) : s in DirectSumDecomposition(FVModule(eo,3)) *};
+		catch e
+			error Sprint(eo), e;
+		end try;
+	end for;
+	assert #{e : e in eolist} eq 2^g;
+	//Sort(~eolist);
+	//print eolist;
+end intrinsic;
+
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+

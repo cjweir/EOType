@@ -1,0 +1,54 @@
+//
+//  In this example we will compute the EO-types of all hyperelliptic curves of the form y^2 = f(x)
+//  with f monic of degree 2g+2 (with no degree 2g+1 term) over F_p^n.
+//
+
+
+Attach("EOType.mag");
+
+// Set the parameters
+
+p:=3;
+n:=1;
+g:=2;
+
+// Run through the curves and gather data
+
+degf:=2*g+1;
+Vf:=VectorSpace(GF(p^n), degf);
+F<x>:=RationalFunctionField(GF(p^n));
+
+EOs:=AssociativeArray();
+
+t:=Cputime();
+last_t:=0;
+for vf in Vf do
+
+	f:=x^(2*g+2) + F!Eltseq(vf);
+	if not IsSquarefree(Numerator(f)) then
+		continue;
+	end if;
+    
+	K:=ext<F|Polynomial([f,0,1])>;
+    Keo:=EOType(K);
+    
+    if IsDefined(EOs, Keo) then
+        EOs[Keo]+:=1;
+    else
+        EOs[Keo]:=1;
+    end if;
+    
+    if Cputime(t)-last_t gt 10 then
+      last_t:=Cputime(t);
+      Data:=[<EOs[k], k> : k in Keys(EOs)];
+      print Sort(Data);
+      print "-- ", vf;
+    end if;
+    
+end for;
+
+// Print the results
+
+Data:=[<EOs[k], k> : k in Keys(EOs)];
+Sort(Data);
+

@@ -1,0 +1,85 @@
+//
+//  In this example we will compute the EO-types of all Prym varieties arising from
+//  unramified double covers of hyperelliptic curves of the form y^2 = f(x) with f monic of odd degree 2g+1 over F_p^n
+//
+
+
+Attach("EOType.mag");
+
+// Set parameters
+
+p:=3;
+n:=1;
+g:=2;
+
+// Run through the curves and gather data
+
+degf:=2*g+1;
+Vf:=VectorSpace(GF(p^n), degf);
+F<x>:=RationalFunctionField(GF(p^n));
+
+AllEOs:=AssociativeArray();
+PrymEos:=AssociativeArray();
+CurvePrym:=AssociativeArray();
+
+E<f,v>:=FreeGroup(2);
+
+for vf in Vf do	 
+	
+	f:=x^(2*g+1) + F!Eltseq(vf+Vf.Dimension(Vf));
+	if not IsSquarefree(Numerator(f)) then
+		continue;
+	end if;
+	K:=ext<F|Polynomial([f,0,1])>;
+	assert Genus(K) eq g; 
+		
+	t:=Cputime();
+	Keo:=EOType(K);
+	
+	zero:=Identity(DivisorGroup(K));
+	Rc:=RayClassGroup(zero);
+	Qg,Qm:=quo<Rc|2*Rc>;
+  	Qmi:=Inverse(Qm);
+
+  	FinSubs := Subgroups(Qg);
+  	Subs:=[sub<Rc|Qmi(S`subgroup)> : S in FinSubs | Index(Qg,S`subgroup) eq 2 ];
+	Flds:=[ RationalExtensionRepresentation(FunctionField(AbelianExtension(zero,s))) : s in Subs | DegreeOfExactConstantField(zero,s) eq 1];
+	EOs:=[*w : f in Flds | w ne [] where w:=EOType(f)*];
+	Pryms:=[* ComposeEO(DecomposeEO(eo) diff DecomposeEO(Keo)) : eo in EOs*];
+	for Peo in EOs do 
+		if IsDefined(AllEOs, Peo) then
+			AllEOs[Peo]+:=1;
+		else
+			AllEOs[Peo]:=1;
+		end if;
+	end for;	
+	if not IsDefined(CurvePrym, Keo) then
+		CurvePrym[Keo] :=AssociativeArray();
+	end if;
+	for Peo in Pryms do 
+		if IsDefined(PrymEos, Peo) then
+			PrymEos[Peo]+:=1;
+		else
+			PrymEos[Peo]:=1;
+		end if;
+		if IsDefined(CurvePrym[Keo], Peo) then
+			CurvePrym[Keo][Peo]+:=1;
+		else
+			CurvePrym[Keo][Peo]:=1;
+		end if;
+	end for;	
+	print vf, Cputime(t);	
+end for;
+
+// Print the results
+
+Data:=[<AllEOs[k], k> : k in Keys(AllEOs)];
+PData:=[<PrymEos[k], k> : k in Keys(PrymEos)];
+for ck in Sort(SetToSequence(Keys(CurvePrym))) do 
+	print ck;
+	CData:=[<CurvePrym[ck][k], k> : k in Keys(CurvePrym[ck])];
+	Sort(CData);
+end for;
+print "\n";
+Sort(Data);
+Sort(PData);
