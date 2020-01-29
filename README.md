@@ -8,7 +8,9 @@ Importing:
 
 To use the code in Magma simply attach the EOType file
 
-> Attach("EOType.mag");
+```
+Attach("EOType.mag");
+```
 
 Examples:
 ---------
@@ -24,7 +26,7 @@ contain examples to compute lists of EOtypes of Jacobians of curves and Prym var
 
 # Documentation:
 
-The documentation is a light (apologies) but included in the folder are the slides from a talk I gave on this codebase. 
+The documentation is a but light (apologies). Included in the folder is what is below and some slides from a (funny at the time) talk I gave on this codebase at the Canadian Mathematics Society Winter Meeting in December 2018. 
 
 
 ## Main functions:
